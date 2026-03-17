@@ -1,22 +1,18 @@
 <!DOCTYPE html>
 <html lang="ms">
-<link rel="manifest" href="manifest.json">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="apple-touch-icon" href="icon-192.png">
-
-<script>
-  // Register Service Worker
-  if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js')
-      .then(() => console.log("PWA Ready!"))
-      .catch(err => console.log("SW Error:", err));
-  }
-</script>
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icon-192.png">
 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Belanja Tracker | Multi-Day</title>
+    <title>Belanja Tracker | Shared Cloud</title>
+
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-database-compat.js"></script>
+
     <style>
         :root {
             --muji-bg: #f7f6f2; 
@@ -108,7 +104,6 @@
             cursor: pointer;
         }
 
-        /* Styling Sejarah Mengikut Hari */
         .history { margin-top: 40px; width: 100%; text-align: left; }
         
         .date-divider {
@@ -142,7 +137,7 @@
 <body>
 
     <div class="app-container">
-        <h1 style="font-weight:300; font-size:1.1rem; color:var(--muji-accent); margin-bottom:10px;">Rekod Perbelanjaan</h1>
+        <h1 style="font-weight:300; font-size:1.1rem; color:var(--muji-accent); margin-bottom:10px;">Rekod Perbelanjaan (Shared)</h1>
         <div id="totalDisplay">RM 0.00</div>
         
         <div class="summary-box">
@@ -160,10 +155,27 @@
 
         <div class="history" id="historyLog"></div>
 
-        <div class="reset-link" id="resetBtn">Padam Semua Rekod</div>
+        <div class="reset-link" id="resetBtn">Padam Semua Rekod Cloud</div>
     </div>
 
     <script>
+        // 1. MASUKKAN CONFIG FIREBASE KAU DI SINI
+        const firebaseConfig = {
+  apiKey: "AIzaSyCfbkNGlshgNyQwyKbVpQ3ec1KvKL4x-vY",
+  authDomain: "belanjafam-tracker.firebaseapp.com",
+  projectId: "belanjafam-tracker",
+  storageBucket: "belanjafam-tracker.firebasestorage.app",
+  messagingSenderId: "323315241978",
+  appId: "1:323315241978:web:f26d76290508b5eff28a43",
+  measurementId: "G-G8DXF1DRBV"
+};
+
+        // Initialize Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
+        const familyID = "SyakirFamily_01"; // ID Bilik Korang
+        const dbRef = db.ref('belanja/' + familyID);
+
         const labelInput = document.getElementById('labelInput');
         const amountInput = document.getElementById('amountInput');
         const submitBtn = document.getElementById('submitBtn');
@@ -174,26 +186,33 @@
         const monthlyDisplay = document.getElementById('monthlyTotal');
         const resetBtn = document.getElementById('resetBtn');
 
-        let historyData = JSON.parse(localStorage.getItem('myBelanja')) || [];
+        let historyData = [];
 
         function triggerHaptic(ms = 10) {
             if (navigator.vibrate) navigator.vibrate(ms);
         }
 
+        // 2. AMBIL DATA REAL-TIME DARI FIREBASE
+        dbRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            historyData = [];
+            if (data) {
+                Object.keys(data).forEach(key => {
+                    historyData.push({ fbKey: key, ...data[key] });
+                });
+            }
+            updateUI();
+        });
+
         function updateUI() {
             historyLog.innerHTML = '';
-            let totalSemua = 0;
-            let totalHariIni = 0;
-            let totalBulanIni = 0;
-
+            let totalSemua = 0, totalHariIni = 0, totalBulanIni = 0;
             const skrg = new Date();
             const skrgDateStr = skrg.toDateString();
-            const bulanSkrg = skrg.getMonth();
-            const tahunSkrg = skrg.getFullYear();
+            const bulanSkrg = skrg.getMonth(), tahunSkrg = skrg.getFullYear();
 
             whatsappBtn.style.display = (historyData.length > 0) ? 'block' : 'none';
 
-            // Kira Total
             historyData.forEach(item => {
                 const d = new Date(item.id);
                 totalSemua += item.amount;
@@ -203,26 +222,21 @@
                 }
             });
 
-            // Papar Sejarah Berasaskan Tarikh
             let lastDateLabel = "";
-            
-            // Susun data terbaru ke atas
             const sortedData = [...historyData].sort((a, b) => b.id - a.id);
 
             sortedData.forEach((item) => {
                 const d = new Date(item.id);
                 const dateLabel = d.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'short' });
 
-                // Tambah pemisah tarikh jika hari berbeza
                 if (dateLabel !== lastDateLabel) {
                     const divider = document.createElement('div');
                     divider.className = 'date-divider';
-                    divider.innerText = dateLabel === skrg.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'short' }) ? "HARI INI" : dateLabel;
+                    divider.innerText = d.toDateString() === skrg.toDateString() ? "HARI INI" : dateLabel;
                     historyLog.appendChild(divider);
                     lastDateLabel = dateLabel;
                 }
 
-                const realIndex = historyData.findIndex(i => i.id === item.id);
                 const div = document.createElement('div');
                 div.className = 'history-item';
                 div.innerHTML = `
@@ -232,7 +246,7 @@
                     </div>
                     <div style="display:flex; align-items:center;">
                         <span class="item-amount">RM ${item.amount.toFixed(2)}</span>
-                        <span class="delete-btn" onclick="padamSatu(${realIndex})">×</span>
+                        <span class="delete-btn" onclick="padamSatu('${item.fbKey}')">×</span>
                     </div>
                 `;
                 historyLog.appendChild(div);
@@ -251,43 +265,35 @@
                 triggerHaptic(20);
                 const skrg = new Date();
                 
-                historyData.push({ 
+                // SIMPAN KE FIREBASE
+                dbRef.push({ 
                     id: skrg.getTime(), 
                     label: label.charAt(0).toUpperCase() + label.slice(1), 
                     amount: val, 
                     timeOnly: skrg.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })
                 });
                 
-                localStorage.setItem('myBelanja', JSON.stringify(historyData));
                 labelInput.value = '';
                 amountInput.value = '';
-                updateUI();
                 labelInput.focus();
             }
         }
 
-        window.padamSatu = function(index) {
-            if(confirm("Padam item ini?")) {
-                historyData.splice(index, 1);
-                localStorage.setItem('myBelanja', JSON.stringify(historyData));
-                updateUI();
+        window.padamSatu = function(fbKey) {
+            if(confirm("Padam item ini untuk semua?")) {
+                db.ref('belanja/' + familyID + '/' + fbKey).remove();
             }
         }
 
         function exportWhatsApp() {
             if (historyData.length === 0) return;
             let mesej = "*RINGKASAN BELANJA*%0A------------------------------%0A";
-            
-            // Kelompokkan untuk WhatsApp juga (ikut tarikh)
             let currentDay = "";
             const sorted = [...historyData].sort((a,b) => a.id - b.id);
             
             sorted.forEach(item => {
                 const d = new Date(item.id).toLocaleDateString('ms-MY', {day:'numeric', month:'short'});
-                if(d !== currentDay) {
-                    mesej += `%0A📅 *${d}*%0A`;
-                    currentDay = d;
-                }
+                if(d !== currentDay) { mesej += `%0A📅 *${d}*%0A`; currentDay = d; }
                 mesej += `- ${item.label}: RM${item.amount.toFixed(2)}%0A`;
             });
             
@@ -300,9 +306,12 @@
         whatsappBtn.onclick = exportWhatsApp;
         labelInput.onkeypress = (e) => { if(e.key === 'Enter') amountInput.focus(); };
         amountInput.onkeypress = (e) => { if(e.key === 'Enter') hantarData(); };
-        resetBtn.onclick = () => { if(confirm("Padam semua rekod?")) { localStorage.clear(); historyData = []; updateUI(); } };
+        resetBtn.onclick = () => { if(confirm("Padam SEMUA rekod di Cloud?")) dbRef.remove(); };
 
-        updateUI();
+        // PWA Register
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').then(() => console.log("PWA Ready!"));
+        }
     </script>
 </body>
 </html>
