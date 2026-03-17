@@ -1,4 +1,4 @@
-const cacheName = 'belanja-v3'; //tukar version siap kali ada update
+const cacheName = 'belanja-v4'; //tukar version siap kali ada update
 const assets = ['./', './index.html']; // Pastikan nama fail HTML kau betul
 
 self.addEventListener('install', e => {
