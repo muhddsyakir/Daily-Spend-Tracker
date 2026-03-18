@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <link rel="manifest" href="manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
+    <link rel="apple-touch-icon" href="icon-192.png">
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('sw.js')
+          .then(() => console.log("PWA Ready!"))
+          .catch(err => console.log("SW Error:", err));
+      }
+    </script>
+
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Belanja Tracker | Cloud</title>
+    <style>
+        :root {
+            --muji-bg: #f7f6f2; 
+            --muji-text: #333333;
+            --muji-accent: #7f7f7f;
+            --muji-red: #bb4444;
+            --google-blue: #4285F4;
+            --apple-font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        body {
+            background-color: var(--muji-bg);
+            color: var(--muji-text);
+            font-family: var(--apple-font);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 40px 20px;
+            box-sizing: border-box;
+            touch-action: manipulation;
+        }
+
+        .app-container {
+            width: 100%;
+            max-width: 350px;
+            text-align: center;
+        }
+
+        #totalDisplay {
+            font-size: 3.5rem;
+            font-weight: 700;
+            margin-bottom: 5px;
+            letter-spacing: -0.05em;
+        }
+
+        .summary-box {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            font-size: 0.8rem;
+            color: var(--muji-accent);
+        }
+        .summary-item b { color: var(--muji-text); }
+
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            margin-bottom: 30px;
+        }
+
+        #whatsappBtn {
+            background-color: #25D366;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(37, 211, 102, 0.1);
+        }
+
+        #backupBtn {
+            background-color: var(--google-blue);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 20px;
+            font-size: 0.75rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            width: 100%;
+        }
+
+        input {
+            width: 100%;
+            box-sizing: border-box;
+            background-color: transparent;
+            border: none;
+            border-bottom: 1px solid #d1d1d1;
+            padding: 15px;
+            font-size: 16px; 
+            text-align: center;
+            outline: none;
+        }
+
+        #submitBtn {
+            margin-top: 15px;
+            background-color: #333;
+            color: #fff;
+            border: none;
+            padding: 20px;
+            border-radius: 50px; 
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+        }
+
+        .history { margin-top: 40px; width: 100%; text-align: left; }
+        
+        .date-divider {
+            font-size: 0.75rem;
+            font-weight: 700;
+            color: var(--muji-accent);
+            background: #e9e8e4;
+            padding: 5px 15px;
+            border-radius: 10px;
+            margin: 20px 0 10px 0;
+            display: inline-block;
+        }
+
+        .history-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+            border-bottom: 0.5px solid #e0e0e0;
+        }
+
+        .item-info { display: flex; flex-direction: column; }
+        .item-label { font-weight: 500; font-size: 0.95rem; }
+        .item-time { font-size: 0.7rem; color: var(--muji-accent); }
+        .item-amount { font-weight: 600; margin-right: 15px; }
+
+        .delete-btn { color: #ccc; font-size: 1.2rem; cursor: pointer; padding: 5px; }
+        .reset-link { margin-top: 50px; font-size: 0.7rem; color: var(--muji-red); opacity: 0.4; cursor: pointer; }
+
+        /* Dark Mode */
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --muji-bg: #1a1a1a;
+                --muji-text: #e0e0e0;
+                --muji-accent: #a0a0a0;
+                --muji-red: #ff6666;
+            }
+            input { border-bottom: 1px solid #444; color: white; }
+            #submitBtn { background-color: #e0e0e0; color: #1a1a1a; }
+            .date-divider { background: #333; color: #a0a0a0; }
+            .history-item { border-bottom: 0.5px solid #333; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="app-container">
+        <h1 style="font-weight:300; font-size:1.1rem; color:var(--muji-accent); margin-bottom:10px;">Rekod Perbelanjaan</h1>
+        <div id="totalDisplay">RM 0.00</div>
+        
+        <div class="summary-box">
+            <div class="summary-item">Hari ini: <b id="dailyTotal">RM 0.00</b></div>
+            <div class="summary-item">Bulan ini: <b id="monthlyTotal">RM 0.00</b></div>
+        </div>
+        
+        <div class="btn-group">
+            <button id="whatsappBtn" style="display: none;">KONGSI RESIT WHATSAPP</button>
+            <button id="backupBtn" style="display: none;">BACKUP KE GOOGLE SHEETS</button>
+        </div>
+        
+        <div class="input-group">
+            <input type="text" id="labelInput" placeholder="Jenis bayaran..." autocomplete="off">
+            <input type="number" id="amountInput" placeholder="RM 0.00" inputmode="decimal">
+            <button id="submitBtn">HANTAR</button>
+        </div>
+
+        <div class="history" id="historyLog"></div>
+
+        <div class="reset-link" id="resetBtn">Padam Semua Rekod</div>
+    </div>
+
+    <script>
+        // MASUKKAN URL GOOGLE APPS SCRIPT ANDA DI SINI
+        const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycby25G6L0iSmawTXNbpz0WIlRVZfbktkqLDaX4KHYcgXm5iWp6XOVxMGuuMTBcHGeF-dPw/exec';
+
+        const labelInput = document.getElementById('labelInput');
+        const amountInput = document.getElementById('amountInput');
+        const submitBtn = document.getElementById('submitBtn');
+        const whatsappBtn = document.getElementById('whatsappBtn');
+        const backupBtn = document.getElementById('backupBtn');
+        const historyLog = document.getElementById('historyLog');
+        const totalDisplay = document.getElementById('totalDisplay');
+        const dailyDisplay = document.getElementById('dailyTotal');
+        const monthlyDisplay = document.getElementById('monthlyTotal');
+        const resetBtn = document.getElementById('resetBtn');
+
+        let historyData = JSON.parse(localStorage.getItem('myBelanja')) || [];
+
+        function triggerHaptic(ms = 10) {
+            if (navigator.vibrate) navigator.vibrate(ms);
+        }
+
+        function updateUI() {
+            historyLog.innerHTML = '';
+            let totalSemua = 0;
+            let totalHariIni = 0;
+            let totalBulanIni = 0;
+
+            const skrg = new Date();
+            const skrgDateStr = skrg.toDateString();
+            const bulanSkrg = skrg.getMonth();
+            const tahunSkrg = skrg.getFullYear();
+
+            const hasData = historyData.length > 0;
+            whatsappBtn.style.display = hasData ? 'block' : 'none';
+            backupBtn.style.display = hasData ? 'block' : 'none';
+
+            historyData.forEach(item => {
+                const d = new Date(item.id);
+                totalSemua += item.amount;
+                if (d.getFullYear() === tahunSkrg && d.getMonth() === bulanSkrg) {
+                    totalBulanIni += item.amount;
+                    if (d.toDateString() === skrgDateStr) totalHariIni += item.amount;
+                }
+            });
+
+            let lastDateLabel = "";
+            const sortedData = [...historyData].sort((a, b) => b.id - a.id);
+
+            sortedData.forEach((item) => {
+                const d = new Date(item.id);
+                const dateLabel = d.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'short' });
+
+                if (dateLabel !== lastDateLabel) {
+                    const divider = document.createElement('div');
+                    divider.className = 'date-divider';
+                    divider.innerText = dateLabel === skrg.toLocaleDateString('ms-MY', { weekday: 'long', day: 'numeric', month: 'short' }) ? "HARI INI" : dateLabel;
+                    historyLog.appendChild(divider);
+                    lastDateLabel = dateLabel;
+                }
+
+                const realIndex = historyData.findIndex(i => i.id === item.id);
+                const div = document.createElement('div');
+                div.className = 'history-item';
+                div.innerHTML = `
+                    <div class="item-info">
+                        <span class="item-label">${item.label}</span>
+                        <span class="item-time">${item.timeOnly}</span>
+                    </div>
+                    <div style="display:flex; align-items:center;">
+                        <span class="item-amount">RM ${item.amount.toFixed(2)}</span>
+                        <span class="delete-btn" onclick="padamSatu(${realIndex})">×</span>
+                    </div>
+                `;
+                historyLog.appendChild(div);
+            });
+
+            totalDisplay.innerText = `RM ${totalSemua.toFixed(2)}`;
+            dailyDisplay.innerText = `RM ${totalHariIni.toFixed(2)}`;
+            monthlyDisplay.innerText = `RM ${totalBulanIni.toFixed(2)}`;
+        }
+
+        async function syncToCloud(item) {
+            if (SCRIPT_URL.includes('URL_APPS_SCRIPT')) return; 
+            try {
+                await fetch(SCRIPT_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    body: JSON.stringify(item)
+                });
+                console.log("Cloud sync done");
+            } catch (e) {
+                console.error("Cloud sync failed", e);
+            }
+        }
+
+        function hantarData() {
+            let label = labelInput.value.trim() || "Lain-lain";
+            const val = parseFloat(amountInput.value);
+
+            if (!isNaN(val) && val > 0) {
+                triggerHaptic(20);
+                const skrg = new Date();
+                
+                const dataBaru = { 
+                    id: skrg.getTime(), 
+                    label: label.charAt(0).toUpperCase() + label.slice(1), 
+                    amount: val, 
+                    timeOnly: skrg.toLocaleTimeString('ms-MY', { hour: '2-digit', minute: '2-digit' })
+                };
+                
+                historyData.push(dataBaru);
+                localStorage.setItem('myBelanja', JSON.stringify(historyData));
+                
+                // Auto Sync ke Google Sheets
+                syncToCloud(dataBaru);
+
+                labelInput.value = '';
+                amountInput.value = '';
+                updateUI();
+                labelInput.focus();
+            }
+        }
+
+        // Fungsi Backup Manual untuk semua data sedia ada
+        backupBtn.onclick = async () => {
+            if (SCRIPT_URL.includes('URL_APPS_SCRIPT')) {
+                alert("Sila masukkan SCRIPT_URL yang betul dalam kod.");
+                return;
+            }
+            backupBtn.innerText = "SEDANG BACKUP...";
+            backupBtn.disabled = true;
+
+            for (const item of historyData) {
+                await syncToCloud(item);
+            }
+
+            alert("Semua data telah dihantar ke Google Sheets!");
+            backupBtn.innerText = "BACKUP KE GOOGLE SHEETS";
+            backupBtn.disabled = false;
+        };
+
+        window.padamSatu = function(index) {
+            if(confirm("Padam item ini dari fon? (Data di Cloud tidak akan padam)")) {
+                historyData.splice(index, 1);
+                localStorage.setItem('myBelanja', JSON.stringify(historyData));
+                updateUI();
+            }
+        }
+
+        function exportWhatsApp() {
+            if (historyData.length === 0) return;
+            let mesej = "*RINGKASAN BELANJA*%0A------------------------------%0A";
+            let currentDay = "";
+            const sorted = [...historyData].sort((a,b) => a.id - b.id);
+            
+            sorted.forEach(item => {
+                const d = new Date(item.id).toLocaleDateString('ms-MY', {day:'numeric', month:'short'});
+                if(d !== currentDay) {
+                    mesej += `%0A *${d}*%0A`;
+                    currentDay = d;
+                }
+                mesej += `- ${item.label}: RM${item.amount.toFixed(2)}%0A`;
+            });
+            
+            mesej += "%0A------------------------------%0A";
+            mesej += `*TOTAL KESELURUHAN: ${totalDisplay.innerText}*`;
+            window.open(`https://wa.me/?text=${mesej}`, '_blank');
+        }
+
+        submitBtn.onclick = hantarData;
+        whatsappBtn.onclick = exportWhatsApp;
+        labelInput.onkeypress = (e) => { if(e.key === 'Enter') amountInput.focus(); };
+        amountInput.onkeypress = (e) => { if(e.key === 'Enter') hantarData(); };
+        resetBtn.onclick = () => { if(confirm("Padam semua rekod di fon?")) { localStorage.clear(); historyData = []; updateUI(); } };
+
+        updateUI();
+    </script>
+</body>
+</html>
